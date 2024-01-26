@@ -15,11 +15,11 @@ GoDuck utilizes Go's concurrency for efficient data downloading from S3 and writ
 ## Usage
 The GoDuck CLI accepts several command-line arguments:
 
--s3_bucket: Specify the source S3 bucket name.
--s3_prefix: Specify the source S3 prefix.
--filename: Set the filename for the local DuckDB database (default=database.duckdb)
--aws_profile: Define the AWS profile for accessing S3 (default=default)
--create_table: Flag to determine if the data should be loaded as tables (default is views).
+- s3_bucket: Specify the source S3 bucket name.
+- s3_prefix: Specify the source S3 prefix.
+- filename: Set the filename for the local DuckDB database (default=database.duckdb)
+- aws_profile: Define the AWS profile for accessing S3 (default=default)
+- create_table: Flag to determine if the data should be loaded as tables (default is views).
 
 >Note: GoDuck using the [normal AWS credential chain](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html)
 
