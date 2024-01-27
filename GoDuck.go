@@ -53,29 +53,33 @@ func main() {
 	//runifysqlCMD command-line arguments
 	template2sqlCMDfrom := template2sqlCMD.String("from", "", "Enter the template file path")
 	template2sqlCMDto := template2sqlCMD.String("to", "", "Enter the output file path")
-	template2sqlCMDrecursive := template2sqlCMD.Bool("recursive", false, "Recursively search for template files")
 
 	switch os.Args[1] {
 	case "parquet2db":
 		handleParquet2Db(parquet2dbCMD, parquet2dbCMDs3_bucket, parquet2dbCMDs3_prefix, parquet2dbCMDregion, parquet2dbCMDfilename, parquet2dbCMDaws_profile, parquet2dbCMDcreateTable)
-	case "runifysql":
-		handletemplate2sql(template2sqlCMD, template2sqlCMDfrom, template2sqlCMDto, template2sqlCMDrecursive)
+	case "template2sql":
+		handletemplate2sql(template2sqlCMD, template2sqlCMDfrom, template2sqlCMDto)
 	default:
 		fmt.Println("expected 'hello' or 'add' subcommands")
 		os.Exit(1)
 	}
 }
 
-func handletemplate2sql(template2sqlCMD *flag.FlagSet, from_fpath, to_fpath *string, recursive *bool) {
-	template2sqlCMD.Parse(os.Args[2:])
-	fmt.Println("Converting templates from", *from_fpath, "to", *to_fpath, "recursively", *recursive)
+func isDirectory(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
 
-	// read text file at from path and assign to template variable
-	file, err := os.Open(*from_fpath)
+	return fileInfo.IsDir()
+}
+
+func getSqlFromTemplatefile(fpath *string) string {
+	file, err := os.Open(*fpath)
 	if err != nil {
 		// Handle the error and exit.
 		fmt.Println("Error opening file:", err)
-		return
+		return ""
 	}
 	defer file.Close()
 	data, _ := io.ReadAll(file)
@@ -89,17 +93,67 @@ func handletemplate2sql(template2sqlCMD *flag.FlagSet, from_fpath, to_fpath *str
 		// Replace '_' with '.' in the match
 		return strings.Replace(match, "_", ".", 1)[1:]
 	})
+	return sql
+}
 
-	// Write sql to file at to path
-	f, err := os.Create(*to_fpath)
+func writeFile(fpath, content string) {
+	f, err := os.Create(fpath)
 	if err != nil {
 		fmt.Println("Error writing file:", err)
 		return
 	}
 	defer f.Close()
-	f.WriteString(sql)
+	f.WriteString(content)
+}
 
-	fmt.Println(*from_fpath, " Successfully converted to sql file located at ", *to_fpath)
+func listFilesInDir(dir string) []string {
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		// fmt.Println(path)
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return files
+}
+
+func handletemplate2sql(template2sqlCMD *flag.FlagSet, from_fpath, to_fpath *string) {
+	template2sqlCMD.Parse(os.Args[2:])
+	fmt.Println("Converting templates from", *from_fpath, "to", *to_fpath, "recursively")
+
+	isDirectoryFrom := isDirectory(*from_fpath)
+	isDirectoryTo := isDirectory(*to_fpath)
+
+	var isdir bool
+	if isDirectoryFrom && isDirectoryTo {
+		isdir = true
+	} else if !isDirectoryFrom && !isDirectoryTo {
+		isdir = false
+	} else {
+		fmt.Println("Error: both from and to must be either directories or files")
+		return
+	}
+
+	if isdir {
+		// Get all files in directory
+		files := listFilesInDir(*from_fpath)
+		fmt.Println(*from_fpath)
+		fmt.Println(*to_fpath)
+		for _, from_file := range files {
+			if strings.Contains(from_file, ".sql") {
+				query := getSqlFromTemplatefile(&from_file)
+				to_file := filepath.Join(*to_fpath, filepath.Base(from_file))
+				writeFile(to_file, query)
+				fmt.Println(from_file, " Successfully converted to sql file located at ", to_file)
+			}
+		}
+	} else {
+		query := getSqlFromTemplatefile(from_fpath)
+		writeFile(*to_fpath, query)
+		fmt.Println(*from_fpath, " Successfully converted to sql file located at ", *to_fpath)
+	}
 }
 
 func handleParquet2Db(parquet2dbCMD *flag.FlagSet, s3_bucket, s3_prefix, region, filename, aws_profile *string, createTable *bool) {
