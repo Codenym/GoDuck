@@ -2,9 +2,8 @@
 
 ## Quick Start
 1. Clone the Repository: `git clone https://github.com/codenym/GoDuck.git`
-1. Navigate to the Directory: `cd GoDuck`
 1. Build the CLI: Ensure Go is installed and run `go build`.
-1. Run the CLI: Use ./GoDuck with the necessary flags. Example: ``./GoDuck -s3_bucket your-bucket -s3_prefix your-prefix -aws_profile your-profile`
+1. Run the CLI: Use `./GoDuck` with the necessary flags (see examples below)
 
 ## Description
 
