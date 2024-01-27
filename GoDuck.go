@@ -18,16 +18,6 @@ import (
 	_ "github.com/marcboeker/go-duckdb"
 )
 
-// Command-line arguments
-// var (
-// 	filename    string
-// 	createTable bool
-// 	s3_bucket   string
-// 	s3_prefix   string
-// 	aws_profile string
-// 	region      string
-// )
-
 // Execute a command on the database
 func execDbCommand(db *sql.DB, command string) {
 	_, err := db.Exec(command)
@@ -51,8 +41,8 @@ func main() {
 	parquet2dbCMDcreateTable := parquet2dbCMD.Bool("create_table", false, "Create as tables or views")
 
 	//runifysqlCMD command-line arguments
-	template2sqlCMDfrom := template2sqlCMD.String("from", "", "Enter the template file path")
-	template2sqlCMDto := template2sqlCMD.String("to", "", "Enter the output file path")
+	template2sqlCMDfrom := template2sqlCMD.String("from", "", "Enter the template file or directory path")
+	template2sqlCMDto := template2sqlCMD.String("to", "", "Enter the output file or directory path")
 
 	switch os.Args[1] {
 	case "parquet2db":
