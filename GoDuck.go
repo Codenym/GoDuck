@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -17,14 +19,14 @@ import (
 )
 
 // Command-line arguments
-var (
-	filename    string
-	createTable bool
-	s3_bucket   string
-	s3_prefix   string
-	aws_profile string
-	region      string
-)
+// var (
+// 	filename    string
+// 	createTable bool
+// 	s3_bucket   string
+// 	s3_prefix   string
+// 	aws_profile string
+// 	region      string
+// )
 
 // Execute a command on the database
 func execDbCommand(db *sql.DB, command string) {
@@ -36,18 +38,72 @@ func execDbCommand(db *sql.DB, command string) {
 
 func main() {
 	// Parse command-line arguments
-	s3_bucket := flag.String("s3_bucket", "", "Enter the S3 bucket")
-	s3_prefix := flag.String("s3_prefix", "", "Enter the S3 prefix")
-	region := flag.String("region", "us-east-1", "Enter the AWS region")
-	filename := flag.String("filename", "database.duckdb", "Enter the filename")
-	aws_profile := flag.String("aws_profile", "default", "Enter the AWS profile")
-	createTable := flag.Bool("create_table", false, "Create as tables or views")
-	flag.Parse()
 
-	// check if filename exists and if so, delete it
-	if _, err := os.Stat(*filename); err == nil {
-		os.Remove(*filename)
+	parquet2dbCMD := flag.NewFlagSet("parquet2db", flag.ExitOnError)
+	template2sqlCMD := flag.NewFlagSet("runifysql", flag.ExitOnError)
+
+	// parquet2dbCMD command-line arguments
+	parquet2dbCMDs3_bucket := parquet2dbCMD.String("s3_bucket", "", "Enter the S3 bucket")
+	parquet2dbCMDs3_prefix := parquet2dbCMD.String("s3_prefix", "", "Enter the S3 prefix")
+	parquet2dbCMDregion := parquet2dbCMD.String("region", "us-east-1", "Enter the AWS region")
+	parquet2dbCMDfilename := parquet2dbCMD.String("filename", "database.duckdb", "Enter the filename")
+	parquet2dbCMDaws_profile := parquet2dbCMD.String("aws_profile", "default", "Enter the AWS profile")
+	parquet2dbCMDcreateTable := parquet2dbCMD.Bool("create_table", false, "Create as tables or views")
+
+	//runifysqlCMD command-line arguments
+	template2sqlCMDfrom := template2sqlCMD.String("from", "", "Enter the template file path")
+	template2sqlCMDto := template2sqlCMD.String("to", "", "Enter the output file path")
+	template2sqlCMDrecursive := template2sqlCMD.Bool("recursive", false, "Recursively search for template files")
+
+	switch os.Args[1] {
+	case "parquet2db":
+		handleParquet2Db(parquet2dbCMD, parquet2dbCMDs3_bucket, parquet2dbCMDs3_prefix, parquet2dbCMDregion, parquet2dbCMDfilename, parquet2dbCMDaws_profile, parquet2dbCMDcreateTable)
+	case "runifysql":
+		handletemplate2sql(template2sqlCMD, template2sqlCMDfrom, template2sqlCMDto, template2sqlCMDrecursive)
+	default:
+		fmt.Println("expected 'hello' or 'add' subcommands")
+		os.Exit(1)
 	}
+}
+
+func handletemplate2sql(template2sqlCMD *flag.FlagSet, from_fpath, to_fpath *string, recursive *bool) {
+	template2sqlCMD.Parse(os.Args[2:])
+	fmt.Println("Converting templates from", *from_fpath, "to", *to_fpath, "recursively", *recursive)
+
+	// read text file at from path and assign to template variable
+	file, err := os.Open(*from_fpath)
+	if err != nil {
+		// Handle the error and exit.
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer file.Close()
+	data, _ := io.ReadAll(file)
+	template := string(data)
+
+	// Replace all instances of $something.something with something_somthing
+	regexPattern := `\$(\w+)_(\w+)`
+	re, _ := regexp.Compile(regexPattern)
+
+	sql := re.ReplaceAllStringFunc(template, func(match string) string {
+		// Replace '_' with '.' in the match
+		return strings.Replace(match, "_", ".", 1)[1:]
+	})
+
+	// Write sql to file at to path
+	f, err := os.Create(*to_fpath)
+	if err != nil {
+		fmt.Println("Error writing file:", err)
+		return
+	}
+	defer f.Close()
+	f.WriteString(sql)
+
+	fmt.Println(*from_fpath, " Successfully converted to sql file located at ", *to_fpath)
+}
+
+func handleParquet2Db(parquet2dbCMD *flag.FlagSet, s3_bucket, s3_prefix, region, filename, aws_profile *string, createTable *bool) {
+	parquet2dbCMD.Parse(os.Args[2:])
 
 	// If createTable is true then assign table to a variable, else assign view
 	var createWhat string
@@ -55,6 +111,12 @@ func main() {
 		createWhat = "TABLE"
 	} else {
 		createWhat = "VIEW"
+	}
+	fmt.Println("Loading parquet files from S3 bucket", *s3_bucket, "with prefix", *s3_prefix, "into", *filename, "as", createWhat, 'S')
+
+	// check if filename exists and if so, delete it
+	if _, err := os.Stat(*filename); err == nil {
+		os.Remove(*filename)
 	}
 
 	// Open database
@@ -126,6 +188,6 @@ func main() {
 	}
 	wg.Wait()
 
-	fmt.Println("DuckDB loading complete.  There were ", len(result.Contents), "items in bucket", *s3_bucket, "with prefix", *s3_prefix)
+	fmt.Println("DuckDB loading complete.  There were ", len(result.Contents), "items in bucket", s3_bucket, "with prefix", s3_prefix)
 
 }
