@@ -92,12 +92,13 @@ func HandleParquet2Db(parquet2dbCMD *flag.FlagSet, s3_bucket, s3_prefix, region,
 				utils.ExecDbCommand(db, sql)
 				createdSchemas[schema_name] = true
 			}
+			query := fmt.Sprintf("CREATE OR REPLACE %s %s.%s AS FROM read_parquet('s3://%s/%s');", createWhat, schema_name, table_name, *s3_bucket, current_key)
 
 			// Create table or view based on args
-			go func(ck, tbl, sch string) {
+			go func(qry string) {
 				defer wg.Done()
-				utils.ExecDbCommand(db, fmt.Sprintf("CREATE OR REPLACE %s %s.%s AS FROM read_parquet('s3://%s/%s');", createWhat, sch, tbl, *s3_bucket, ck))
-			}(current_key, table_name, schema_name)
+				utils.ExecDbCommand(db, qry)
+			}(query)
 
 		}
 	}
