@@ -27,7 +27,7 @@ func HandleParquet2Db(parquet2dbCMD *flag.FlagSet, s3_bucket, s3_prefix, region,
 	} else {
 		createWhat = "VIEW"
 	}
-	fmt.Println("Loading parquet files from S3 bucket", *s3_bucket, "with prefix", *s3_prefix, "into", *filename, "as", createWhat, 'S')
+	fmt.Println("Loading parquet files from S3 bucket", *s3_bucket, "with prefix", *s3_prefix, "into", *filename, "as", createWhat, "S")
 
 	// check if filename exists and if so, delete it
 	if _, err := os.Stat(*filename); err == nil {
@@ -75,16 +75,16 @@ func HandleParquet2Db(parquet2dbCMD *flag.FlagSet, s3_bucket, s3_prefix, region,
 	createdSchemas := make(map[string]bool)
 	var wg sync.WaitGroup
 	for _, item := range result.Contents {
-		wg.Add(1)
 		// Check filename matches expected format
-		if *item.Key != "" && strings.Contains(*item.Key, ".parquet") && strings.Contains(*item.Key, "_") {
+		current_key := *item.Key
+		if current_key != "" && strings.Contains(current_key, ".parquet") && strings.Contains(current_key, "_") {
+			wg.Add(1)
 			// Get the schema and table_name from the filename
-			filename := filepath.Base(*item.Key)
+			filename := filepath.Base(current_key)
 			schema_name := strings.Split(filename, "_")[0]
 			table := strings.Split(filename, "_")[1:]
 			table_name := strings.Join(table, "_")
 			table_name = strings.Split(table_name, ".")[0]
-
 			// Create schema if it hasn't been created yet
 			if !createdSchemas[schema_name] {
 				sql := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", schema_name)
@@ -94,15 +94,15 @@ func HandleParquet2Db(parquet2dbCMD *flag.FlagSet, s3_bucket, s3_prefix, region,
 			}
 
 			// Create table or view based on args
-			go func() {
+			go func(ck, tbl, sch string) {
 				defer wg.Done()
-				utils.ExecDbCommand(db, fmt.Sprintf("CREATE OR REPLACE %s %s.%s AS FROM read_parquet('s3://%s/%s');", createWhat, schema_name, table_name, *s3_bucket, *item.Key))
-			}()
+				utils.ExecDbCommand(db, fmt.Sprintf("CREATE OR REPLACE %s %s.%s AS FROM read_parquet('s3://%s/%s');", createWhat, sch, tbl, *s3_bucket, ck))
+			}(current_key, table_name, schema_name)
 
 		}
 	}
 	wg.Wait()
 
-	fmt.Println("DuckDB loading complete.  There were ", len(result.Contents), "items in bucket", s3_bucket, "with prefix", s3_prefix)
+	fmt.Println("DuckDB loading complete.  There were ", len(result.Contents), "items in bucket", *s3_bucket, "with prefix", *s3_prefix)
 
 }
